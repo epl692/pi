@@ -42,15 +42,16 @@ fn main() {
 
     // Precision for rug::Float. We need a bit more than n decimal digits.
     // log2(10) is approx 3.32. So, we need n * 3.32 bits.
-    let prec = (n as f64 * 3.33).ceil() as u32;
+    let prec = (n as f64 * 3.33).ceil() as u32 + 10;
 
-    let terms_per_thread = (n + num_threads as u32 - 1) / num_threads as u32;
+    let num_terms = n + 5; // Use more terms for better accuracy
+    let terms_per_thread = (num_terms + num_threads as u32 - 1) / num_threads as u32;
 
     let mut handles = vec![];
 
     for i in 0..num_threads {
         let start = i as u32 * terms_per_thread;
-        let end = ((i + 1) as u32 * terms_per_thread).min(n);
+        let end = ((i + 1) as u32 * terms_per_thread).min(num_terms);
         let handle = thread::spawn(move || {
             let mut partial_sum = Float::with_val(prec, 0);
             for k in start..end {
@@ -66,5 +67,15 @@ fn main() {
         pi += handle.join().unwrap();
     }
 
-    println!("Pi: {}", pi.to_string_radix(10, Some(n as usize)));
+    // The user wants n digits after the decimal, and the output to be truncated.
+    // We can achieve this by getting a string with more precision and then truncating it.
+    let pi_string = pi.to_string_radix(10, Some(n as usize + 5)); // Get extra digits for accurate truncation
+    let dot_pos = pi_string.find('.').unwrap_or(1);
+    let end_pos = dot_pos + 1 + n as usize;
+
+    if pi_string.len() > end_pos {
+        println!("Pi: {}", &pi_string[..end_pos]);
+    } else {
+        println!("Pi: {}", pi_string);
+    }
 }
