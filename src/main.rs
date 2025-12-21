@@ -1,5 +1,6 @@
 use clap::Parser;
 use rug::{Float, Integer, ops::Pow};
+use rayon::join;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -40,8 +41,9 @@ fn bs(a: u64, b: u64) -> (Integer, Integer, Integer) {
         return (p, q, t);
     }
     let m = (a + b) / 2;
-    let (p1, q1, t1) = bs(a, m);
-    let (p2, q2, t2) = bs(m, b);
+    let (left, right) = join(|| bs(a, m), || bs(m, b));
+    let (p1, q1, t1) = left;
+    let (p2, q2, t2) = right;
     let p = (&p1 * &p2).into();
     let q = (&q1 * &q2).into();
     let t1q2: Integer = (&t1 * &q2).into();
