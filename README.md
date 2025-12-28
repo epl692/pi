@@ -1,20 +1,18 @@
 # Pi Calculator
 
-This is a multi-threaded Rust program that calculates the first n digits of Pi using the Bailey–Borwein–Plouffe (BBP) formula. It uses arbitrary-precision arithmetic to ensure the accuracy of the calculated digits.
+This is a multi-threaded Rust program that calculates the first n digits of Pi using the Bailey–Borwein–Plouffe (BBP) formula. It uses arbitrary-precision arithmetic (rug) and parallelism (rayon).
 
-## Features
+## Improvements in this branch
 
-*   Calculates the first n digits of Pi.
-*   Multi-threaded to speed up the calculation.
-*   Configurable number of threads.
-*   Uses the BBP algorithm.
-*   High-precision calculation using the `rug` crate.
+* Parallelized BBP summation with rayon for better thread control and load balancing.
+* Safer argument validation and error handling (avoids unwraps on runtime errors).
+* Optional output-to-file support.
+* Added CI workflow to run formatting, clippy, tests and build on push/PR.
+* Release profile tuned for better optimized builds (LTO, opt-level=3).
 
 ## Building
 
-To build the program, you need to have Rust and Cargo installed. You can install them from [https://rustup.rs/](https://rustup.rs/).
-
-Once you have Rust and Cargo installed, you can build the program with the following command:
+Requires Rust and Cargo. Build with:
 
 ```bash
 cargo build --release
@@ -22,26 +20,28 @@ cargo build --release
 
 ## Usage
 
-To run the program, you can use the following command:
-
 ```bash
 ./target/release/pi <N> [OPTIONS]
 ```
 
-### Arguments
+Arguments
 
-*   `<N>`: The number of digits of Pi to calculate.
+* `<N>`: Number of digits after the decimal point to calculate.
 
-### Options
+Options
 
-*   `-t`, `--threads <THREADS>`: The number of threads to use. Defaults to 4.
-*   `-h`, `--help`: Print help information.
-*   `-V`, `--version`: Print version information.
+* `-t`, `--threads <THREADS>`: Number of threads to use (default 4).
+* `-o`, `--output <FILE>`: Write output to FILE instead of stdout.
+* `-h`, `--help`: Print help.
 
-### Example
+Example
 
-To calculate the first 1000 digits of Pi using 8 threads, you can run the following command:
+Calculate 1000 digits using 8 threads and write to a file:
 
 ```bash
-./target/release/pi 1000 -t 8
+./target/release/pi 1000 -t 8 -o pi1000.txt
 ```
+
+Notes
+
+For very large numbers of digits, using a decimal-friendly algorithm such as Chudnovsky (with binary splitting) will be far faster and more memory-efficient than BBP; consider switching to Chudnovsky for production-grade large computations.
