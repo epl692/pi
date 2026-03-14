@@ -57,7 +57,7 @@ fn isqrt(n: &BigInt) -> BigInt {
         return BigInt::zero();
     }
     let bits = n.bits() as usize;
-    let mut x: BigInt = BigInt::one() << ((bits + 1) / 2);
+    let mut x: BigInt = BigInt::one() << bits.div_ceil(2);
     loop {
         let y = (&x + n / &x) >> 1usize;
         if y >= x {
@@ -74,7 +74,7 @@ fn pow10(exp: usize) -> BigInt {
     }
     let half = pow10(exp / 2);
     let sq = &half * &half;
-    if exp % 2 == 0 {
+    if exp.is_multiple_of(2) {
         sq
     } else {
         sq * BigInt::from(10u32)
