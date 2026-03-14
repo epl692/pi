@@ -74,7 +74,11 @@ fn pow10(exp: usize) -> BigInt {
     }
     let half = pow10(exp / 2);
     let sq = &half * &half;
-    if exp % 2 == 0 { sq } else { sq * BigInt::from(10u32) }
+    if exp % 2 == 0 {
+        sq
+    } else {
+        sq * BigInt::from(10u32)
+    }
 }
 
 /// Calculate Pi to `n` decimal digits using the Chudnovsky algorithm (binary splitting).
