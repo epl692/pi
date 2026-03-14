@@ -17,11 +17,5 @@ jobs:
           toolchain: stable
           profile: minimal
           override: true
-      - name: Run cargo fmt check
-        run: cargo fmt -- --check
-      - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Run tests
-        run: cargo test --verbose
-      - name: Build release
-        run: cargo build --release --verbose
+      - name: Run CI steps (fmt, clippy, test, build)
+        run: cargo fmt -- --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test --verbose && cargo build --release --verbose
