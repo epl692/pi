@@ -1,5 +1,6 @@
 use clap::Parser;
-use rug::{Float, Integer, ops::Pow};
+use num_bigint::BigInt;
+use num_traits::{One, Zero};
 use rayon::join;
 use std::fs::File;
 use std::io::Write;
@@ -22,19 +23,17 @@ struct Args {
 
 // Binary splitting for the Chudnovsky algorithm.
 // Returns (P, Q, T) as big integers for the interval [a, b)
-fn bs(a: u64, b: u64) -> (Integer, Integer, Integer) {
+fn bs(a: u64, b: u64) -> (BigInt, BigInt, BigInt) {
     if b - a == 1 {
         if a == 0 {
             // P = 1, Q = 1, T = 13591409
-            return (Integer::from(1), Integer::from(1), Integer::from(13591409));
+            return (BigInt::one(), BigInt::one(), BigInt::from(13591409u64));
         }
-        let a_i = Integer::from(a as i128);
-        let p: Integer = (Integer::from(6 * a as i128 - 5)
-            * Integer::from(2 * a as i128 - 1)
-            * Integer::from(6 * a as i128 - 1))
-            .into();
-        let q: Integer = (Integer::from(a as i128).pow(3) * Integer::from(640320i128).pow(3)).into();
-        let mut t: Integer = (p.clone() * Integer::from(13591409i128 + 545140134i128 * a_i)).into();
+        let ai = BigInt::from(a);
+        let p = BigInt::from(6 * a - 5) * BigInt::from(2 * a - 1) * BigInt::from(6 * a - 1);
+        let c = BigInt::from(640320u64);
+        let q = (&ai * &ai * &ai) * (&c * &c * &c);
+        let mut t = &p * (BigInt::from(13591409u64) + BigInt::from(545140134u64) * &ai);
         if a % 2 == 1 {
             t = -t;
         }
@@ -44,12 +43,38 @@ fn bs(a: u64, b: u64) -> (Integer, Integer, Integer) {
     let (left, right) = join(|| bs(a, m), || bs(m, b));
     let (p1, q1, t1) = left;
     let (p2, q2, t2) = right;
-    let p = (&p1 * &p2).into();
-    let q = (&q1 * &q2).into();
-    let t1q2: Integer = (&t1 * &q2).into();
-    let p1t2: Integer = (&p1 * &t2).into();
+    let p = &p1 * &p2;
+    let q = &q1 * &q2;
+    let t1q2: BigInt = &t1 * &q2;
+    let p1t2: BigInt = &p1 * &t2;
     let t = t1q2 + p1t2;
     (p, q, t)
+}
+
+/// Integer square root: returns floor(sqrt(n))
+fn isqrt(n: &BigInt) -> BigInt {
+    if n <= &BigInt::zero() {
+        return BigInt::zero();
+    }
+    let bits = n.bits() as usize;
+    let mut x: BigInt = BigInt::one() << ((bits + 1) / 2);
+    loop {
+        let y = (&x + n / &x) >> 1usize;
+        if y >= x {
+            return x;
+        }
+        x = y;
+    }
+}
+
+/// Compute 10^exp using repeated squaring
+fn pow10(exp: usize) -> BigInt {
+    if exp == 0 {
+        return BigInt::one();
+    }
+    let half = pow10(exp / 2);
+    let sq = &half * &half;
+    if exp % 2 == 0 { sq } else { sq * BigInt::from(10u32) }
 }
 
 /// Calculate Pi to `n` decimal digits using the Chudnovsky algorithm (binary splitting).
@@ -62,41 +87,27 @@ pub fn calculate_pi_chudnovsky(n: u32) -> Result<String, String> {
     let digits_per_term = 14.181647462725477;
     let terms = ((n as f64) / digits_per_term).ceil() as u64 + 1;
 
-    // Bits of precision: log2(10) ~= 3.321928. Add guard bits.
-    let prec = (n as f64 * 3.3219280948873626).ceil() as u32 + 20;
-
     let (_p, q, t) = bs(0, terms);
 
-    // Convert big integers to high-precision floats
-    let prec_u = prec as u32;
-    let qf = Float::with_val(prec_u, q);
-    let tf = Float::with_val(prec_u, t);
+    // Compute pi using integer arithmetic:
+    //   pi = 426880 * sqrt(10005) * Q / T
+    // We compute pi * 10^work_prec as a big integer, then format.
+    let extra = 20usize;
+    let work_prec = n as usize + extra;
 
-    // C = 426880 * sqrt(10005)
-    let c = Float::with_val(prec_u, 426880) * Float::with_val(prec_u, 10005).sqrt();
+    // sqrt(10005) * 10^work_prec = isqrt(10005 * 10^(2*work_prec))
+    let scale_sq = pow10(2 * work_prec);
+    let sqrt_10005_scaled = isqrt(&(BigInt::from(10005u32) * scale_sq));
 
-    let pi = c * qf / tf;
+    // pi * 10^work_prec = 426880 * sqrt_10005_scaled * Q / T
+    let pi_scaled = BigInt::from(426880u32) * sqrt_10005_scaled * q / t;
 
-    // Convert to decimal string with a few extra digits for safe truncation.
-    let extra = 10usize;
-    let pi_string = pi.to_string_radix(10, Some(n as usize + extra));
-
-    // Find dot safely and truncate or pad as needed.
-    let dot_pos = pi_string.find('.').unwrap_or(pi_string.len());
-    let end_pos = dot_pos + 1 + n as usize;
-
-    let out = if pi_string.len() >= end_pos {
-        pi_string[..end_pos].to_string()
-    } else {
-        let mut s = pi_string;
-        if !s.contains('.') {
-            s.push('.');
-        }
-        while s.len() < end_pos {
-            s.push('0');
-        }
-        s
-    };
+    // pi_scaled ≈ 3.14159... * 10^work_prec; insert decimal point after first digit.
+    let s = pi_scaled.to_str_radix(10);
+    if s.len() < 2 + n as usize {
+        return Err("insufficient precision".into());
+    }
+    let out = format!("{}.{}", &s[..1], &s[1..1 + n as usize]);
 
     Ok(out)
 }
